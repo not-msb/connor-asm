@@ -1,0 +1,9 @@
+// This file contains pseudo-code
+// It makes it easier for me to remember the internals of the compiler
+
+Token = union(enum) {
+  whitespace = null,
+  identifier = 0,
+}
+
+Token.Size = 1
