@@ -52,7 +52,7 @@ tokenize:
     pop eax
     je .identifierEnd
     jmp .identifier
-.alphaEnd:
+.identifierEnd:
     dec ecx
     inc edx
 

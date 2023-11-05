@@ -8,7 +8,7 @@ then
     exit
 fi
 
-fasm main.fasm main
+fasm main.asm main
 
 if [ "$1" == "run" ]
 then

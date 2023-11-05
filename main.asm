@@ -15,7 +15,7 @@ MAX_TOKEN_COUNT equ 1024
 
 TOKEN_SIZE equ 1
 
-include "macros.fasm"
+include "macros.asm"
 
 segment readable executable
 entry _start
@@ -154,7 +154,7 @@ exit:
     mov ebx, 0
     int 80h
 
-include "token.fasm"
+include "token.asm"
 
 segment readable writable
 msg strDef 10, "Hello, World!", 10
