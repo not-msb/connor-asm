@@ -3,7 +3,11 @@
 
 Token = union(enum) {
   whitespace = null,
-  identifier = 0,
+  identifier: []const u8 = 0,
+  plus = 1,
+  minus = 2,
+  star = 3,
+  slash = 4,
 }
 
-Token.Size = 1
+Token.Size = 1 + 8 = 9

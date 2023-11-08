@@ -1,3 +1,9 @@
+TOKEN_IDENTIFIER = 0
+TOKEN_PLUS = 1
+TOKEN_MINUS = 2
+TOKEN_STAR = 3
+TOKEN_SLASH = 4
+
 ; tokenize(output: [*]Token, input: [*]const u8, input_len: u32) u32
 tokenize:
     push ebp
@@ -29,6 +35,15 @@ tokenize:
         jmp .identifier
     .alphaCheckEnd:
 
+    cmp byte [ecx], 43
+    je .plus
+    cmp byte [ecx], 45
+    je .minus
+    cmp byte [ecx], 42
+    je .star
+    cmp byte [ecx], 47
+    je .slash
+
     jmp errorHandle.token
 
 .loopRet:
@@ -40,24 +55,53 @@ tokenize:
     jmp .loopRet
 
 .identifier:
-    inc ecx
-    dec edx
-    cmp edx, 0
-    je .identifierEnd
-
+    push edx
+    push ecx
     push eax
-    mov al, byte [ecx]
-    call isAlpha
-    cmp eax, 0
-    pop eax
-    je .identifierEnd
-    jmp .identifier
-.identifierEnd:
-    dec ecx
-    inc edx
+    push ebx
 
+    mov ebx, isAlpha
+    call takeWhile
+    cmp eax, 0
+    je .identifierFalse
+
+    pop ebx
+    pop eax
+
+.identifierTrue:
     inc eax
-    mov byte [ebx], 0
+    mov byte [ebx], TOKEN_IDENTIFIER
+    pop dword [ebx+1]
+    pop dword [ebx+5]
+    sub dword [ebx+5], edx
+    add ebx, TOKEN_SIZE
+    jmp .loopRet
+.identifierFalse:
+    pop dword [ebx+1]
+    pop dword [ebx+5]
+    jmp .loopRet
+
+.plus:
+    inc eax
+    mov byte [ebx], TOKEN_PLUS
+    add ebx, TOKEN_SIZE
+    jmp .loopRet
+
+.minus:
+    inc eax
+    mov byte [ebx], TOKEN_MINUS
+    add ebx, TOKEN_SIZE
+    jmp .loopRet
+
+.star:
+    inc eax
+    mov byte [ebx], TOKEN_STAR
+    add ebx, TOKEN_SIZE
+    jmp .loopRet
+
+.slash:
+    inc eax
+    mov byte [ebx], TOKEN_SLASH
     add ebx, TOKEN_SIZE
     jmp .loopRet
 
@@ -77,4 +121,28 @@ isAlpha:
     ret
 .end:
     mov al, 0
+    ret
+
+; takeWhile(f: fn(u8) bool, input: [*]const u8, input_len: u32) u32
+takeWhile:
+    push ebp
+    mov ebp, esp
+    push edx
+    jmp .body
+.loop:
+    inc ecx
+    dec edx
+.body:
+    cmp edx, 0
+    je .end
+
+    mov al, byte [ecx]
+    call ebx
+    cmp al, 0
+    je .end
+    jmp .loop
+.end:
+    pop eax
+    sub eax, edx
+    pop ebp
     ret
