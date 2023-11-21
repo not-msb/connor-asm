@@ -1,39 +1,54 @@
+TOKEN_SIZE = 9
 TOKEN_IDENTIFIER = 0
-TOKEN_PLUS = 1
-TOKEN_MINUS = 2
-TOKEN_STAR = 3
-TOKEN_SLASH = 4
+TOKEN_INTEGER = 1
+TOKEN_PLUS = 2
+TOKEN_MINUS = 3
+TOKEN_STAR = 4
+TOKEN_SLASH = 5
+TOKEN_FN = 6
 
-; tokenize(output: [*]Token, input: [*]const u8, input_len: u32) u32
+token:
+.fn strDef "fn"
+
+; tokenize(output: [*]Token, input: [*]const u8, length: u32) u32
 tokenize:
     push ebp
     mov ebp, esp
+    push edi
+    push esi
     xor eax, eax
+    jmp .loop
+
+.loopRet:
+    inc eax
+    add ebx, TOKEN_SIZE
+    inc ecx
+    dec edx
 
 .loop:
     cmp edx, 0
     je .end
 
-    ; whitespace = { ' ', '\t', '\n', vt, ff, '\r' }
     .whitespaceCheck:
-        cmp byte [ecx], 32
-        je .whitespace
-        cmp byte [ecx], 9
-        jl .whitespaceCheckEnd
-        cmp byte [ecx], 13
-        jg .whitespaceCheckEnd
-        jmp .whitespace
+        push eax
+        mov al, byte[ecx]
+        call isWhitespace
+        cmp al, 0
+        pop eax
+        je .whitespaceCheckEnd
+        inc ecx
+        dec edx
     .whitespaceCheckEnd:
 
-    .alphaCheck:
-        push eax
-        mov al, byte [ecx]
-        call isAlpha
-        cmp eax, 0
-        pop eax
-        je .alphaCheckEnd
-        jmp .identifier
-    .alphaCheckEnd:
+    .fnCheck:
+        push ecx
+        mov edi, token.fn
+        mov esi, ecx
+        mov ecx, token.fn.len
+        call memcmp
+        pop ecx
+        jz .fn
+    .fnCheckEnd:
 
     cmp byte [ecx], 43
     je .plus
@@ -44,69 +59,109 @@ tokenize:
     cmp byte [ecx], 47
     je .slash
 
+    .alphaCheck:
+        push edx
+        push ecx
+        push ebx
+        push eax
+
+        mov ebx, isAlpha
+        call takeWhile
+
+        cmp al, 0
+        pop eax
+        pop ebx
+        jne .identifier
+        pop ecx
+        pop edx
+    .alphaCheckEnd:
+
+    .digitCheck:
+        push edx
+        push ecx
+        push ebx
+        push eax
+
+        mov ebx, isDigit
+        call takeWhile
+
+        cmp al, 0
+        pop eax
+        pop ebx
+        jne .integer
+        pop ecx
+        pop edx
+    .digitCheckEnd:
+
     jmp errorHandle.token
 
-.loopRet:
-    inc ecx
-    dec edx
-    jmp .loop
-
-.whitespace:
-    jmp .loopRet
-
 .identifier:
-    push edx
-    push ecx
-    push eax
-    push ebx
-
-    mov ebx, isAlpha
-    call takeWhile
-    cmp eax, 0
-    je .identifierFalse
-
-    pop ebx
-    pop eax
-
-.identifierTrue:
-    inc eax
     mov byte [ebx], TOKEN_IDENTIFIER
     pop dword [ebx+1]
     pop dword [ebx+5]
     sub dword [ebx+5], edx
-    add ebx, TOKEN_SIZE
     jmp .loopRet
-.identifierFalse:
-    pop dword [ebx+1]
-    pop dword [ebx+5]
+
+.integer:
+    mov byte [ebx], TOKEN_INTEGER
+
+    pop edi
+    pop esi
+    sub esi, edx
+    push eax
+    push ebx
+    push ecx
+
+    call stou
+
+    pop ecx
+    pop ebx
+    mov dword [ebx+1], eax
+    pop eax
+
+    jmp .loopRet
+
+.fn:
+    mov byte [ebx], TOKEN_FN
+    add ecx, token.fn.len-1
+    sub edx, token.fn.len-1
     jmp .loopRet
 
 .plus:
-    inc eax
     mov byte [ebx], TOKEN_PLUS
-    add ebx, TOKEN_SIZE
     jmp .loopRet
 
 .minus:
-    inc eax
     mov byte [ebx], TOKEN_MINUS
-    add ebx, TOKEN_SIZE
     jmp .loopRet
 
 .star:
-    inc eax
     mov byte [ebx], TOKEN_STAR
-    add ebx, TOKEN_SIZE
     jmp .loopRet
 
 .slash:
-    inc eax
     mov byte [ebx], TOKEN_SLASH
-    add ebx, TOKEN_SIZE
     jmp .loopRet
 
 .end:
+    pop esi
+    pop edi
     pop ebp
+    ret
+
+; isWhitespace(c: u8) bool
+; al
+isWhitespace:
+    cmp al, 32
+    je .end
+
+    sub al, 9
+    cmp al, 13-9
+    setna al
+    ret
+
+.end:
+    mov al, 1
     ret
 
 ; isAlpha(c: u8) bool
@@ -115,15 +170,18 @@ isAlpha:
     or al, 0x20
     sub al, 'a'
     cmp al, 'z'-'a'
-    ja .end
-
-    mov al, 1
-    ret
-.end:
-    mov al, 0
+    setna al
     ret
 
-; takeWhile(f: fn(u8) bool, input: [*]const u8, input_len: u32) u32
+; isAlpha(c: u8) bool
+; al
+isDigit:
+    sub al, '0'
+    cmp al, '9'-'0'
+    setna al
+    ret
+
+; takeWhile(f: fn(u8) bool, input: [*]const u8, length: u32) u32
 takeWhile:
     push ebp
     mov ebp, esp
@@ -139,8 +197,7 @@ takeWhile:
     mov al, byte [ecx]
     call ebx
     cmp al, 0
-    je .end
-    jmp .loop
+    jne .loop
 .end:
     pop eax
     sub eax, edx

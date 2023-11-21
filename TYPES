@@ -4,10 +4,18 @@
 Token = union(enum) {
   whitespace = null,
   identifier: []const u8 = 0,
-  plus = 1,
-  minus = 2,
-  star = 3,
-  slash = 4,
+  integer: u32 = 1,
+  plus = 2,
+  minus = 3,
+  star = 4,
+  slash = 5,
+  fn = 6,
 }
 
 Token.Size = 1 + 8 = 9
+
+Ast = union(enum) {
+    integer: u32 = 0,
+}
+
+Ast.Size = 1 + 8 = 9

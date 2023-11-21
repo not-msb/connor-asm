@@ -13,8 +13,6 @@ O_RDONLY equ 0
 MAX_FILE_LEN equ 32 * 1024
 MAX_TOKEN_COUNT equ 1024
 
-TOKEN_SIZE equ 9
-
 include "macros.asm"
 
 segment readable executable
@@ -23,26 +21,19 @@ _start:
     push ebp
     mov ebp, esp
 
-    mov eax, SYS_OPEN
-    mov ebx, filename
-    mov ecx, O_RDONLY
-    mov edx, 0
-    int 80h
+    MSysOpen input.name, O_RDONLY, 0
 
     cmp eax, -1
     je errorHandle.fileOpen
+    mov [input.desc], eax
 
-    mov eax, SYS_READ
-    mov ebx, eax
-    mov ecx, file_buffer
-    mov edx, MAX_FILE_LEN
-    int 80h
+    MSysRead [input.desc], input.buffer, MAX_FILE_LEN
 
     cmp eax, -1
     je errorHandle.fileRead
 
     mov ebx, token_buffer
-    mov ecx, file_buffer
+    mov ecx, input.buffer
     mov edx, eax
     call tokenize
 
@@ -62,9 +53,7 @@ _start:
     jmp .tokenPrintLoop
 .tokenPrintLoopEnd:
 
-    mov eax, SYS_CLOSE
-    mov ebx, eax
-    int 80h
+    MSysClose [input.desc]
 
     cmp eax, -1
     je errorHandle.fileClose
@@ -73,31 +62,19 @@ _start:
 
 ; printToken(token: *const Token) void
 printToken:
-    cmp byte [ebx], TOKEN_IDENTIFIER
-    je .identifier
-    cmp byte [ebx], TOKEN_PLUS
-    je .plus
-    cmp byte [ebx], TOKEN_MINUS
-    je .minus
-    cmp byte [ebx], TOKEN_STAR
-    je .star
-    cmp byte [ebx], TOKEN_SLASH
-    je .slash
+    movzx eax, byte [ebx]
+    mov eax, [.table+4*eax]
+    jmp eax
+.table:
+    dd .identifier, .integer, .plus, .minus, .star, .slash, .fn
 
 .unknown:
-    mov eax, SYS_WRITE
-    mov ebx, 1
     mov ecx, tokenMsg.unknown
     mov edx, tokenMsg.unknown.len
-    int 80h
-    jmp .end
+    jmp .print
 .identifier:
     push ebx
-    mov eax, SYS_WRITE
-    mov ebx, 1
-    mov ecx, tokenMsg.identifier
-    mov edx, tokenMsg.identifier.len
-    int 80h
+    MPutS tokenMsg.identifier
     pop ebx
 
     mov eax, SYS_WRITE
@@ -108,34 +85,48 @@ printToken:
 
     call putN
     jmp .end
-.plus:
+.integer:
+    push ebx
+    MPutS tokenMsg.integer
+    pop ebx
+
+    mov ecx, dword [ebx+1]
+    mov ebx, int_buffer
+    call fmtInt
+
+    mov edx, eax
+    lea ecx, [int_buffer+10]
+    sub ecx, edx
     mov eax, SYS_WRITE
     mov ebx, 1
+    int 80h
+
+    call putN
+    jmp .end
+.plus:
     mov ecx, tokenMsg.plus
     mov edx, tokenMsg.plus.len
-    int 80h
-    jmp .end
+    jmp .print
 .minus:
-    mov eax, SYS_WRITE
-    mov ebx, 1
     mov ecx, tokenMsg.minus
     mov edx, tokenMsg.minus.len
-    int 80h
-    jmp .end
+    jmp .print
 .star:
-    mov eax, SYS_WRITE
-    mov ebx, 1
     mov ecx, tokenMsg.star
     mov edx, tokenMsg.star.len
-    int 80h
-    jmp .end
+    jmp .print
 .slash:
-    mov eax, SYS_WRITE
-    mov ebx, 1
     mov ecx, tokenMsg.slash
     mov edx, tokenMsg.slash.len
+    jmp .print
+.fn:
+    mov ecx, tokenMsg.fn
+    mov edx, tokenMsg.fn.len
+    jmp .print
+.print:
+    mov eax, SYS_WRITE
+    mov ebx, 1
     int 80h
-    jmp .end
 .end:
     ret
 
@@ -167,6 +158,29 @@ fmtInt:
     mov eax, ecx
     pop esi
     pop ebp
+    ret
+
+; stou(buffer: [*]const u8, length: u32) u32
+; edi - esi
+stou:
+    mov ebx, 1
+    xor ecx, ecx
+    jmp .body
+.loop:
+    dec esi
+.body:
+    cmp esi, 0
+    je .end
+
+    movzx eax, byte [edi+esi-1]
+    sub eax, '0'
+    imul eax, ebx
+    imul ebx, 10
+    add ecx, eax
+
+    jmp .loop
+.end:
+    mov eax, ecx
     ret
 
 putN:
@@ -211,9 +225,12 @@ exit:
     int 80h
 
 include "token.asm"
+include "mem.asm"
 
 segment readable writable
-filename strDef "input.con", 0
+input:
+.name strDef "input.con", 0
+.desc dd 0
 newline db 10
 errorMsg:
 .fileRead strDef "[error] Couldn't read file", 10
@@ -223,11 +240,13 @@ errorMsg:
 tokenMsg:
 .unknown strDef "[token] Unknown", 10
 .identifier strDef "[token] Identifier:", 10
+.integer strDef "[token] Integer:", 10
 .plus strDef "[token] Plus", 10
 .minus strDef "[token] Minus", 10
 .star strDef "[token] Star", 10
 .slash strDef "[token] Slash", 10
+.fn strDef "[token] Fn", 10
 
 int_buffer rb 10
-file_buffer rb MAX_FILE_LEN
+input.buffer rb MAX_FILE_LEN
 token_buffer rb TOKEN_SIZE * MAX_TOKEN_COUNT
